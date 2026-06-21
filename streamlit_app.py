@@ -1,8 +1,10 @@
 import streamlit as st
 import requests
 import datetime
+import json
 import os
-BASE_URL = st.secrets.get("BACKEND_URL", "http://localhost:8000")  # Backend endpoint
+
+BASE_URL = st.secrets.get("BACKEND_URL", "http://localhost:8000")
 
 # =====================================================================
 # 1. Page Configuration
@@ -10,14 +12,13 @@ BASE_URL = st.secrets.get("BACKEND_URL", "http://localhost:8000")  # Backend end
 st.set_page_config(
     page_title="🌍 AI Travel Planner",
     page_icon="🌍",
-    layout="wide",  # Changed to wide layout for side-by-side view with sidebar
+    layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # =====================================================================
 # 🎨 Travel Background Image & Custom UI Styling Integration
 # =====================================================================
-# High-resolution vintage map and travel aesthetic image URL
 background_image_url = "https://images.unsplash.com/photo-1488646953014-85cb44e25828?q=80&w=1920"
 
 st.markdown(
@@ -33,10 +34,9 @@ st.markdown(
         background-attachment: fixed;
     }}
 
-    /* 2. Force sidebar background transparency to blend into the map landscape seamlessly */
+    /* 2. Sidebar background - backdrop-filter removed to fix slider interaction */
     [data-testid="stSidebar"] {{
-        background-color: rgba(248, 250, 252, 0.88) !important;
-        backdrop-filter: blur(4px);
+        background-color: rgba(248, 250, 252, 0.92) !important;
         border-right: 1px solid rgba(226, 232, 240, 0.8);
     }}
 
@@ -60,7 +60,7 @@ st.markdown(
     h1, h2, h3, p, span, li, label, .stMarkdown {{
         color: #0f172a !important;
     }}
-    
+
     /* Keep status message logs readable inside container wrappers */
     div[data-testid="stStatusWidget"] p, div[data-testid="stStatusWidget"] span {{
         color: #1e293b !important;
@@ -119,14 +119,13 @@ for message in st.session_state.messages:
 # 6. Modern Bottom Chat Input Bar
 # =====================================================================
 if user_input := st.chat_input("e.g., Plan a trip to Pune or Goa"):
-    
+
     # Immediately display and save user message
     st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # Enrich prompt behind the scenes *only* if the history is empty or it's a new search
-    # If the user is just saying "thank you", we pass their message naturally
+    # Enrich prompt with sidebar preferences
     if any(keyword in user_input.lower() for keyword in ["thank", "yes", "no", "ok", "hello", "hi"]):
         enriched_prompt = user_input
     else:
@@ -142,36 +141,55 @@ if user_input := st.chat_input("e.g., Plan a trip to Pune or Goa"):
         with st.status("🤖 Travel Agent is thinking...", expanded=True) as status:
             try:
                 status.write("🧠 Processing conversation...")
-                
-                # Pass the exact live message history payload to your backend
+
                 payload = {
                     "messages": st.session_state.messages[:-1] + [{"role": "user", "content": enriched_prompt}]
                 }
-                
-                response = requests.post(f"{BASE_URL}/query", json=payload)
 
-                if response.status_code == 200:
-                    answer = response.json().get("answer", "No answer returned.")
-                    status.update(label="✅ Response Generated!", state="complete", expanded=False)
-                    
-                    # Display the final answer immediately
-                    st.markdown(answer)
-                    
-                    # Commit the exact answer to message history for the next chat turn
-                    st.session_state.messages.append({"role": "assistant", "content": answer})
-                    
-                    # Optional: Add download button if it looks like a long itinerary
-                    if len(answer) > 300:
-                        st.download_button(
-                            label="📥 Download Plan (.md)",
-                            data=answer,
-                            file_name=f"itinerary.md",
-                            mime="text/markdown"
-                        )
-                else:
-                    status.update(label="❌ Generation Failed", state="error", expanded=True)
-                    st.error(f"Execution Error: {response.text}")
-                    
+                # ── Streaming response ──────────────────────────────
+                with requests.post(f"{BASE_URL}/query", json=payload, stream=True, timeout=120) as response:
+                    if response.status_code == 200:
+                        status.update(label="✅ Response Generated!", state="complete", expanded=False)
+
+                        placeholder = st.empty()
+                        answer = ""
+
+                        for line in response.iter_lines():
+                            if line:
+                                decoded = line.decode("utf-8")
+                                if decoded.startswith("data: "):
+                                    data = decoded[6:]
+                                    if data == "[DONE]":
+                                        break
+                                    try:
+                                        chunk = json.loads(data)
+                                        answer += chunk.get("word", "")
+                                        placeholder.markdown(answer + "▌")
+                                    except json.JSONDecodeError:
+                                        pass
+
+                        # Final render without the cursor
+                        placeholder.markdown(answer)
+
+                        # Save to chat history
+                        st.session_state.messages.append({"role": "assistant", "content": answer})
+
+                        # Download button for long itineraries
+                        if len(answer) > 300:
+                            st.download_button(
+                                label="📥 Download Plan (.md)",
+                                data=answer,
+                                file_name="itinerary.md",
+                                mime="text/markdown"
+                            )
+                    else:
+                        status.update(label="❌ Generation Failed", state="error", expanded=True)
+                        st.error(f"Execution Error: {response.text}")
+
+            except requests.exceptions.Timeout:
+                status.update(label="❌ Request Timed Out", state="error", expanded=True)
+                st.error("The request timed out. The backend may be waking up — please try again in 30 seconds.")
+
             except Exception as e:
                 status.update(label="❌ Pipeline Offline", state="error", expanded=True)
                 st.error(f"Backend Connection Error: {str(e)}")
