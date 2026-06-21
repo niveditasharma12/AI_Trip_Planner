@@ -5,6 +5,7 @@ fastapi
 python-dotenv
 streamlit
 uvicorn
+fastapi
 pydantic
 httpx
 requests
@@ -14,4 +15,4 @@ langchain_groq
 langchain_openai
 langgraph
 
--e .
+

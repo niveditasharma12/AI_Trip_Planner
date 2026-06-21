@@ -1,8 +1,8 @@
 import streamlit as st
 import requests
 import datetime
-
-BASE_URL = "http://localhost:8000"  # Backend endpoint
+import os
+BASE_URL = st.secrets.get("BACKEND_URL", "http://localhost:8000")  # Backend endpoint
 
 # =====================================================================
 # 1. Page Configuration
