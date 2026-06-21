@@ -5,7 +5,6 @@ fastapi
 python-dotenv
 streamlit
 uvicorn
-fastapi
 pydantic
 httpx
 requests
