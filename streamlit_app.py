@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import datetime
 import os
-BASE_URL = st.secrets.get("https://ai-trip-planner-4xgu.onrender.com", "http://localhost:8000")  # Backend endpoint
+BASE_URL = st.secrets.get("BACKEND_URL", "http://localhost:8000")  # Backend endpoint
 
 # =====================================================================
 # 1. Page Configuration
