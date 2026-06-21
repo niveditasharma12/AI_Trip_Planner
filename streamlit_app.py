@@ -189,7 +189,7 @@ if user_input := st.chat_input("e.g., Plan a trip to Pune or Goa"):
             except requests.exceptions.Timeout:
                 status.update(label="❌ Request Timed Out", state="error", expanded=True)
                 st.error("The request timed out. The backend may be waking up — please try again in 30 seconds.")
-
+# this is exception
             except Exception as e:
                 status.update(label="❌ Pipeline Offline", state="error", expanded=True)
                 st.error(f"Backend Connection Error: {str(e)}")

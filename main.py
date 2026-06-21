@@ -60,6 +60,6 @@ async def query_travel_agent(query: QueryRequest):
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(word_streamer(), media_type="text/event-stream")
-
+#this is exception
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
